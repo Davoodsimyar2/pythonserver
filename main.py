@@ -1,116 +1,93 @@
-from flask import Flask, request, jsonify
-import time
+from flask import Flask, request, jsonify, render_template_string
+import requests
+import datetime
 
 app = Flask(__name__)
 
-# نگهداری آخرین داده هر ESP
-# device_data[device_id][code] = آخرین دیتا برای هر کد
-device_data = {}
-# زمان آخرین آپدیت برای هر کد
-device_timestamp = {}
+# -------------------------------
+# تنظیمات تلگرام
+# -------------------------------
+BOT_TOKEN = "8279500877:AAGRNBet6lez8DrHxFTInKliswjrKdFIljM"
+CHAT_ID = "456223831"
 
-# تعیین device_id بر اساس code (هر 1000 تا یک device)
-def get_device_id(code):
+# -------------------------------
+# ذخیره پیام‌ها در حافظه
+# -------------------------------
+messages = []
+
+
+# -------------------------------
+# تابع ارسال به تلگرام
+# -------------------------------
+def send_to_telegram(text):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {"chat_id": CHAT_ID, "text": text}
+
     try:
-        code = int(code)
-        return code // 1000
-    except:
-        return None
-
-@app.route("/data", methods=["POST"])
-def receive_data():
-    """
-    دریافت داده از ESP
-    دیتا باید شامل فیلد 'code' باشد
-    """
-    global device_data, device_timestamp
-    data = request.json
-
-    if not data or "code" not in data:
-        return jsonify({"error": "missing 'code' field"}), 400
-
-    code = int(data["code"])
-    device_id = get_device_id(code)
-    if device_id is None:
-        return jsonify({"error": "invalid code"}), 400
-
-    # ایجاد دیکشنری برای device_id اگر وجود ندارد
-    if device_id not in device_data:
-        device_data[device_id] = {}
-        device_timestamp[device_id] = {}
-
-    # ذخیره داده
-    device_data[device_id][code] = data
-    device_timestamp[device_id][code] = time.time()
-
-    print(f"Device {device_id} code {code} updated:", data)
-    return jsonify({"status": "success", "device_id": device_id, "code": code})
+        requests.post(url, data=payload, timeout=5)
+    except Exception as e:
+        print("Telegram Error:", e)
 
 
-@app.route("/poll", methods=["GET"])
-def poll():
-    """
-    GET endpoint:
-    - ESP: ?device_id=0&last=timestamp → long-polling، دریافت همه کدهای رنج
-    - موبایل: ?code=1234 → دریافت آخرین دیتا فقط برای یک کد مشخص
-    """
-    last = float(request.args.get("last", 0))
-
-    # حالت موبایل: فقط یک کد مشخص
-    code = request.args.get("code")
-    if code is not None:
-        try:
-            code = int(code)
-        except:
-            return jsonify({"error": "invalid code"}), 400
-        device_id = get_device_id(code)
-        if device_id in device_data and code in device_data[device_id]:
-            return jsonify({
-                "data": device_data[device_id][code],
-                "timestamp": device_timestamp[device_id][code]
-            })
-        else:
-            return jsonify({"status": "no data for this code"}), 404
-
-    # حالت ESP: دریافت همه کدهای رنج
-    device_id = request.args.get("device_id")
-    if device_id is None:
-        return jsonify({"error": "device_id missing"}), 400
-    try:
-        device_id = int(device_id)
-    except:
-        return jsonify({"error": "invalid device_id"}), 400
-
-    timeout = 30
-    start = time.time()
-    while time.time() - start < timeout:
-        updated_codes = {}
-        if device_id in device_timestamp:
-            for code, ts in device_timestamp[device_id].items():
-                if ts > last:
-                    updated_codes[code] = device_data[device_id][code]
-
-        if updated_codes:
-            # آخرین timestamp از بین همه کدهای جدید
-            latest_ts = max(device_timestamp[device_id][c] for c in updated_codes)
-            return jsonify({"data": updated_codes, "timestamp": latest_ts})
-
-        time.sleep(0.5)
-
-    # بدون داده جدید
-    return jsonify({"status": "no new data", "timestamp": last})
-
-
+# -------------------------------
+# دریافت پیام از موبایل
+# -------------------------------
 @app.route("/", methods=["GET"])
-def home():
-    """نمایش همه ESPها برای دیباگ"""
-    return jsonify({
-        "devices": device_data,
-        "timestamps": device_timestamp
+def receive_message():
+    text = request.args.get("text", "")
+
+    if text.strip() == "":
+        return "No message received"
+
+    # اضافه کردن زمان
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # ذخیره پیام
+    messages.append({
+        "text": text,
+        "time": timestamp
     })
 
+    # ارسال به تلگرام
+    send_to_telegram(f"📩 پیام جدید:\n{text}\n⏰ زمان: {timestamp}")
 
+    return "OK"
+
+
+# -------------------------------
+# صفحه وب برای نمایش پیام‌ها
+# -------------------------------
+@app.route("/messages", methods=["GET"])
+def show_messages():
+    html_page = """
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Message Viewer</title>
+        <style>
+            body { font-family: sans-serif; background: #f3f3f3; padding: 20px; }
+            .msg { background: white; padding: 15px; margin-bottom: 10px; border-radius: 8px;
+                   box-shadow: 0 0 5px rgba(0,0,0,0.1); }
+            .time { color: #666; font-size: 12px; }
+        </style>
+    </head>
+    <body>
+        <h1>پیام‌های دریافتی</h1>
+        {% for msg in messages %}
+            <div class="msg">
+                <div>{{ msg.text }}</div>
+                <div class="time">{{ msg.time }}</div>
+            </div>
+        {% endfor %}
+    </body>
+    </html>
+    """
+
+    return render_template_string(html_page, messages=messages)
+
+
+# -------------------------------
+# اجرای محلی
+# -------------------------------
 if __name__ == "__main__":
-    import os
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=5000)
