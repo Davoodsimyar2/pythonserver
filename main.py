@@ -7,7 +7,7 @@ app = Flask(__name__)
 # -------------------------------
 # تنظیمات تلگرام
 # -------------------------------
-BOT_TOKEN = "8279500877:AAGRNBet6lez8DrHxFTInKliswjrKdFIljM"
+BOT_TOKEN = "8584267991:AAGmtLex7pslf1oqEjcLCOnVnS69uVKosmc"
 CHAT_ID = "456223831"
 
 
