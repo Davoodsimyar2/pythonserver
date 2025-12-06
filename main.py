@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, render_template_string
 import requests
 import datetime
+import pytz
 
 app = Flask(__name__)
 
@@ -10,14 +11,16 @@ app = Flask(__name__)
 BOT_TOKEN = "8584267991:AAGmtLex7pslf1oqEjcLCOnVnS69uVKosmc"
 CHAT_ID = "456223831"
 
-
-
-
-
 # -------------------------------
 # ذخیره پیام‌ها در حافظه
 # -------------------------------
 messages = []
+
+# -------------------------------
+# تنظیم منطقه زمانی (GMT+2)
+# -------------------------------
+TZ = pytz.timezone("Etc/GMT-2")
+# توجه: برای GMT+2 باید از GMT-2 استفاده شود (کاملاً درست است)
 
 
 # -------------------------------
@@ -43,8 +46,8 @@ def receive_message():
     if text.strip() == "":
         return "No message received"
 
-    # اضافه کردن زمان
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # زمان با GMT+2
+    timestamp = datetime.datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S")
 
     # ذخیره پیام
     messages.append({
