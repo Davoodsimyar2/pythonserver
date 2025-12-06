@@ -55,7 +55,7 @@ def receive_message():
     })
 
     # ارسال به تلگرام
-    send_to_telegram(f"📩 پیام جدید:\n{text}\n⏰ زمان: {timestamp}")
+    send_to_telegram(f"📩 پیام جدید:\n{text}\n⏰ زمان سرور: {timestamp}")
 
     return "OK"
 
