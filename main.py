@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, render_template_string
 import requests
 import datetime
-import pytz
+from zoneinfo import ZoneInfo   # جایگزین pytz
 
 app = Flask(__name__)
 
@@ -17,10 +17,9 @@ CHAT_ID = "456223831"
 messages = []
 
 # -------------------------------
-# تنظیم منطقه زمانی (GMT+2)
+# منطقه زمانی GMT+2
 # -------------------------------
-TZ = pytz.timezone("Etc/GMT-2")
-# توجه: برای GMT+2 باید از GMT-2 استفاده شود (کاملاً درست است)
+TZ = ZoneInfo("Etc/GMT-2")    # برای GMT+2 باید GMT-2 زده شود (قانون TZ)
 
 
 # -------------------------------
