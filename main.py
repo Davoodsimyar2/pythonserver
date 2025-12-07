@@ -1,99 +1,33 @@
-from flask import Flask, request, jsonify, render_template_string
-import requests
-import datetime
-from zoneinfo import ZoneInfo   # جایگزین pytz
+from fastapi import FastAPI, UploadFile, File
+from fastapi.responses import FileResponse
+import os
 
-app = Flask(__name__)
+app = FastAPI()
 
-# -------------------------------
-# تنظیمات تلگرام
-# -------------------------------
-BOT_TOKEN = "8584267991:AAGmtLex7pslf1oqEjcLCOnVnS69uVKosmc"
-CHAT_ID = "456223831"
+UPLOAD_PATH = "latest.jpg"
 
-# -------------------------------
-# ذخیره پیام‌ها در حافظه
-# -------------------------------
-messages = []
+@app.post("/upload")
+async def upload_image(file: UploadFile = File(...)):
+    content = await file.read()
 
-# -------------------------------
-# منطقه زمانی GMT+2
-# -------------------------------
-TZ = ZoneInfo("Etc/GMT-2")    # برای GMT+2 باید GMT-2 زده شود (قانون TZ)
+    # ذخیره تصویر
+    with open(UPLOAD_PATH, "wb") as f:
+        f.write(content)
 
+    print("✔ تصویر دریافت شد و ذخیره شد.")
+    return {"status": "ok"}
 
-# -------------------------------
-# تابع ارسال به تلگرام
-# -------------------------------
-def send_to_telegram(text):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": CHAT_ID, "text": text}
-
-    try:
-        requests.post(url, data=payload, timeout=5)
-    except Exception as e:
-        print("Telegram Error:", e)
+@app.get("/latest")
+async def get_latest():
+    if not os.path.exists(UPLOAD_PATH):
+        return {"error": "No image uploaded yet."}
+    return FileResponse(UPLOAD_PATH)
 
 
-# -------------------------------
-# دریافت پیام از موبایل
-# -------------------------------
-@app.route("/", methods=["GET"])
-def receive_message():
-    text = request.args.get("text", "")
-
-    if text.strip() == "":
-        return "No message received"
-
-    # زمان با GMT+2
-    timestamp = datetime.datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S")
-
-    # ذخیره پیام
-    messages.append({
-        "text": text,
-        "time": timestamp
-    })
-
-    # ارسال به تلگرام
-    send_to_telegram(f"📩 پیام جدید:\n{text}\n⏰ زمان سرور: {timestamp}")
-
-    return "OK"
-
-
-# -------------------------------
-# صفحه وب برای نمایش پیام‌ها
-# -------------------------------
-@app.route("/messages", methods=["GET"])
-def show_messages():
-    html_page = """
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <title>Message Viewer</title>
-        <style>
-            body { font-family: sans-serif; background: #f3f3f3; padding: 20px; }
-            .msg { background: white; padding: 15px; margin-bottom: 10px; border-radius: 8px;
-                   box-shadow: 0 0 5px rgba(0,0,0,0.1); }
-            .time { color: #666; font-size: 12px; }
-        </style>
-    </head>
-    <body>
-        <h1>پیام‌های دریافتی</h1>
-        {% for msg in messages %}
-            <div class="msg">
-                <div>{{ msg.text }}</div>
-                <div class="time">{{ msg.time }}</div>
-            </div>
-        {% endfor %}
-    </body>
-    </html>
-    """
-
-    return render_template_string(html_page, messages=messages)
-
-
-# -------------------------------
-# اجرای محلی
-# -------------------------------
+# ----------------------------
+# Render uses PORT environment variable
+# ----------------------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    import uvicorn
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
