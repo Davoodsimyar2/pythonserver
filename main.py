@@ -1,18 +1,21 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 import os
+import threading
 
 app = FastAPI(title="ScreenView Debug Server")
 
 UPLOAD_PATH = "latest.jpg"
 event_list = []  # لیست ایونت‌ها
+event_lock = threading.Lock()  # برای جلوگیری از race condition
 
 # -------------------------------
 # صفحه اصلی
 # -------------------------------
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    events_html = "<br>".join([str(e) for e in event_list]) if event_list else "هیچ ایونتی ثبت نشده."
+    with event_lock:
+        events_html = "<br>".join([str(e) for e in event_list]) if event_list else "هیچ ایونتی ثبت نشده."
     return f"""
     <html>
         <body>
@@ -58,16 +61,20 @@ async def get_latest():
 # -------------------------------
 @app.post("/event")
 async def post_event(event: dict):
-    event_list.append(event)
+    with event_lock:
+        event_list.append(event)
     print(f"✔ ایونت دریافت شد: {event}")
     return {"status": "ok"}
 
 # -------------------------------
-# دریافت ایونت‌ها (GET)
+# دریافت ایونت‌ها (GET) و پاک کردن بعد از ارسال
 # -------------------------------
 @app.get("/event")
 async def get_events():
-    return event_list
+    with event_lock:
+        current_events = event_list.copy()
+        event_list.clear()  # پاک کردن ایونت‌ها بعد از ارسال
+    return current_events
 
 # -------------------------------
 # اجرای سرور
