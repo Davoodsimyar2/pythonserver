@@ -5,13 +5,15 @@ import os
 app = FastAPI(title="ScreenView Debug Server")
 
 UPLOAD_PATH = "latest.jpg"
+event_list = []  # لیست ایونت‌ها
 
 # -------------------------------
-# صفحه اصلی برای تست از مرورگر
+# صفحه اصلی
 # -------------------------------
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    return """
+    events_html = "<br>".join([str(e) for e in event_list]) if event_list else "هیچ ایونتی ثبت نشده."
+    return f"""
     <html>
         <body>
             <h2>ارسال تصویر تست</h2>
@@ -21,6 +23,8 @@ async def index():
             </form>
             <h2>دریافت آخرین تصویر</h2>
             <a href="/latest" target="_blank">مشاهده آخرین تصویر</a>
+            <h2>لیست ایونت‌ها</h2>
+            {events_html}
         </body>
     </html>
     """
@@ -32,14 +36,11 @@ async def index():
 async def upload_image(file: UploadFile = File(...)):
     if not file.filename.lower().endswith((".jpg", ".jpeg", ".png")):
         raise HTTPException(status_code=400, detail="فایل باید jpg یا png باشد")
-
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="فایل خالی است")
-
     with open(UPLOAD_PATH, "wb") as f:
         f.write(content)
-
     print(f"✔ تصویر دریافت شد: {file.filename}, سایز: {len(content)} بایت")
     return {"status": "ok", "filename": file.filename, "size": len(content)}
 
@@ -53,7 +54,23 @@ async def get_latest():
     return FileResponse(UPLOAD_PATH)
 
 # -------------------------------
-# اجرای سرور (Render-ready)
+# ثبت ایونت (POST)
+# -------------------------------
+@app.post("/event")
+async def post_event(event: dict):
+    event_list.append(event)
+    print(f"✔ ایونت دریافت شد: {event}")
+    return {"status": "ok"}
+
+# -------------------------------
+# دریافت ایونت‌ها (GET)
+# -------------------------------
+@app.get("/event")
+async def get_events():
+    return event_list
+
+# -------------------------------
+# اجرای سرور
 # -------------------------------
 if __name__ == "__main__":
     import uvicorn
