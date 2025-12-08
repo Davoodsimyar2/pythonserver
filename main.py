@@ -1,13 +1,18 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 import os
 import threading
 
-app = FastAPI(title="ScreenView Debug Server")
+app = FastAPI(title="ScreenView Optimized Server")
 
 UPLOAD_PATH = "latest.jpg"
-event_list = []  # لیست ایونت‌ها
-event_lock = threading.Lock()  # برای جلوگیری از race condition
+event_list = []
+event_lock = threading.Lock()
+
+# نسخه تصویر (هر بار آپلود جدید → +1)
+image_version = 0
+version_lock = threading.Lock()
+
 
 # -------------------------------
 # صفحه اصلی
@@ -32,20 +37,41 @@ async def index():
     </html>
     """
 
+
+# -------------------------------
+# API جدید: نسخه تصویر
+# -------------------------------
+@app.get("/latest_version")
+async def get_version():
+    global image_version
+    return {"version": image_version}
+
+
 # -------------------------------
 # آپلود تصویر
 # -------------------------------
 @app.post("/upload")
 async def upload_image(file: UploadFile = File(...)):
+    global image_version
+
     if not file.filename.lower().endswith((".jpg", ".jpeg", ".png")):
         raise HTTPException(status_code=400, detail="فایل باید jpg یا png باشد")
+
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="فایل خالی است")
+
     with open(UPLOAD_PATH, "wb") as f:
         f.write(content)
-    print(f"✔ تصویر دریافت شد: {file.filename}, سایز: {len(content)} بایت")
-    return {"status": "ok", "filename": file.filename, "size": len(content)}
+
+    # افزایش نسخه تصویر
+    with version_lock:
+        image_version += 1
+
+    print(f"✔ تصویر جدید آپلود شد. نسخه تصویر: {image_version}")
+
+    return {"status": "ok", "version": image_version, "size": len(content)}
+
 
 # -------------------------------
 # دریافت آخرین تصویر
@@ -56,8 +82,9 @@ async def get_latest():
         raise HTTPException(status_code=404, detail="No image uploaded yet.")
     return FileResponse(UPLOAD_PATH)
 
+
 # -------------------------------
-# ثبت ایونت (POST)
+# ثبت ایونت
 # -------------------------------
 @app.post("/event")
 async def post_event(event: dict):
@@ -66,15 +93,17 @@ async def post_event(event: dict):
     print(f"✔ ایونت دریافت شد: {event}")
     return {"status": "ok"}
 
+
 # -------------------------------
-# دریافت ایونت‌ها (GET) و پاک کردن بعد از ارسال
+# دریافت و پاک کردن ایونت‌ها
 # -------------------------------
 @app.get("/event")
 async def get_events():
     with event_lock:
-        current_events = event_list.copy()
-        event_list.clear()  # پاک کردن ایونت‌ها بعد از ارسال
-    return current_events
+        current = event_list.copy()
+        event_list.clear()
+    return current
+
 
 # -------------------------------
 # اجرای سرور
